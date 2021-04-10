@@ -1,172 +1,154 @@
 package wallet
 
 import (
-	"github.com/anonimous-arn/wallet/pkg/types"
-	"reflect"
-	"testing"
 	"fmt"
+	"testing"
+
+	"github.com/anonimous-arn/wallet/pkg/types"
+
+	"github.com/google/uuid"
 )
-
-type testAccount struct {
-	phone		types.Phone
-	balance		types.Money
-	payments	[]struct{
-		amount		types.Money
-		category	types.PaymentCategory
-	}
-}
-
-var defaultTestAccount = testAccount{
-	phone:		"+992000000001",
-	balance: 	10_000_00,
-	payments: 	[]struct{
-		amount		types.Money
-		category	types.PaymentCategory
-	}{
-		{amount: 1_000_00, category: "auto"},
-	},
-}
 
 type testService struct {
 	*Service
 }
 
-func (s *testService) addAccount(data testAccount) (*types.Account, []*types.Payment, error) {
-	account, err := s.RegisterAccount(data.phone)
-	if err != nil {
-		return nil, nil, fmt.Errorf("can't regist account,  error = %v", err)
-	}
-
-	err = s.Deposit(account.ID, data.balance)
-	if err != nil {
-		return nil, nil, fmt.Errorf("can't deposity account, error = %v", err)
-	}
-
-	payments := make([]*types.Payment, len(data.payments))
-	for i, payment := range data.payments {
-		payments[i], err = s.Pay(account.ID, payment.amount, payment.category)
-		if err != nil {
-			return nil, nil, fmt.Errorf("can't make payment, error = %v", err)
-		}
-	}
-
-	return account, payments, nil
+func newTestService() *testService {
+	return &testService{Service: &Service{}}
 }
-func TestService_FindAccountByID_success(t *testing.T) {
-	svc := &Service{}
 
-	account, _ := svc.RegisterAccount("+992000000001")
-
-	acc, e := svc.FindAccountByID(account.ID)
-
-	if e != nil {
-		t.Error(e)
+func (s *testService) addAccountWithBalance(phone types.Phone, balance types.Money) (*types.Account, error) {
+	account, err := s.RegisterAccount(phone)
+	if err != nil {
+		return nil, fmt.Errorf("can't register account, error = %v", err)
 	}
 
-	if !reflect.DeepEqual(account, acc) {
-		t.Error("Accounts doesn't match")
+	err = s.Deposit(account.ID, balance)
+	if err != nil {
+		return nil, fmt.Errorf("can't deposti account, error = %v", err)
+	}
+
+	return account, nil
+}
+
+func TestService_FindAccountByID_found(t *testing.T) {
+	svc := newTestService()
+	account, err := svc.addAccountWithBalance("+992001010000", 1)
+	if err != nil {
+		t.Error(err)
+	}
+	_, err = svc.FindAccountByID(account.ID)
+	if err != nil {
+		t.Error(err)
 	}
 }
 
 func TestService_FindAccountByID_notFound(t *testing.T) {
 	svc := &Service{}
-
-	_, e := svc.FindAccountByID(123)
-
-	if e != ErrAccountNotFound {
-		t.Error(e)
+	_, err := svc.RegisterAccount("+992001010000")
+	if err != nil {
+		t.Error(err)
+	}
+	var accountID int64 = 123
+	_, err = svc.FindAccountByID(accountID)
+	if err == nil {
+		t.Errorf("User with ID %v found", accountID)
 	}
 }
 
-func TestService_FindPaymentByID_success(t *testing.T) {
+func TestService_FindPaymentByID_found(t *testing.T) {
 	svc := &Service{}
-
-	account, errorReg := svc.RegisterAccount("+992000000001")
-
-	if errorReg != nil {
-		t.Error("error on register account")
+	account, err := svc.RegisterAccount("+992001010000")
+	svc.Deposit(account.ID, 20_000_00)
+	if err != nil {
+		t.Error(err)
 	}
-
-	_, er := svc.Pay(account.ID, 1000, "auto")
-
-	if er == ErrAmountMustBePositive {
-		t.Error(ErrAmountMustBePositive)
+	payment, err := svc.Pay(account.ID, 10_000_00, "Mobile")
+	if err != nil {
+		t.Error(err)
 	}
-
-	if er == nil {
-		t.Error("error on pay")
+	_, err = svc.FindPaymentByID(payment.ID)
+	if err != nil {
+		t.Error(err)
 	}
 }
 
 func TestService_FindPaymentByID_notFound(t *testing.T) {
 	svc := &Service{}
-
-	_, err := svc.FindPaymentByID("aaa")
-
-	if err != ErrPaymentNotFound {
-		t.Error("payment exist")
+	paymentID := uuid.New().String()
+	_, err := svc.FindPaymentByID(paymentID)
+	if err == nil {
+		t.Errorf("Found payment by ID: %v", paymentID)
 	}
 }
 
 func TestService_Reject_success(t *testing.T) {
+	svc := newTestService()
+
+	phone := types.Phone("+992001010000")
+	account, err := svc.addAccountWithBalance(phone, 10_000_00)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	payment, err := svc.Pay(account.ID, 1000_0, "auto")
+	if err != nil {
+		t.Errorf("Reject(): can't create payment, error = %v", err)
+		return
+	}
+
+	err = svc.Reject(payment.ID)
+	if err != nil {
+		t.Errorf("Reject(): error = %v", err)
+		return
+	}
+}
+
+func TestService_Reject_paymentFound(t *testing.T) {
 	svc := &Service{}
-
-	account, errAccount := svc.RegisterAccount("992000000001")
-
-	if errAccount == ErrPhoneRegistered {
-		t.Error(ErrPhoneRegistered)
+	account, err := svc.RegisterAccount("+992001010000")
+	svc.Deposit(account.ID, 20_000_00)
+	if err != nil {
+		t.Error(err)
 	}
-
-	_, errPay := svc.Pay(account.ID, 1000, "auto")
-
-	if errPay != ErrNotEnoughBalance {
-		t.Error(ErrNotEnoughBalance)
+	payment, err := svc.Pay(account.ID, 10_000_00, "Mobile")
+	if err != nil {
+		t.Error(err)
+	}
+	err = svc.Reject(payment.ID)
+	if err != nil {
+		t.Error(err)
 	}
 }
 
-func TestService_Reject_notRejectPaymentNotFound(t *testing.T) {
+func TestService_Reject_paymentNotFound(t *testing.T) {
 	svc := &Service{}
-
-	account, errAccount := svc.RegisterAccount("992000000001")
-
-	if errAccount == ErrPhoneRegistered {
-		t.Error(ErrPhoneRegistered)
-	}
-
-	_, errPay := svc.Pay(account.ID, 1000, "auto")
-
-	if errPay != ErrNotEnoughBalance {
-		t.Error(ErrNotEnoughBalance)
+	paymentID := uuid.New().String()
+	err := svc.Reject(paymentID)
+	if err == nil {
+		t.Errorf("Found payment by ID: %v", paymentID)
 	}
 }
 
-func newTestService() *testService {
-	return &testService{Service: &Service{}}
-}
 func TestService_Repeat_success(t *testing.T) {
 	s := newTestService()
-	_, payments, err := s.addAccount(defaultTestAccount)
+
+	account, err := s.addAccountWithBalance("9127660305", 100)
 	if err != nil {
-		t.Error(err)
+		t.Errorf("account => %v", account)
 		return
 	}
 
-	payment := payments[0]
-	newPayment, nil := s.Repeat(payment.ID)
+	payment, err := s.Pay(account.ID, 10, "some")
 	if err != nil {
-		t.Error(err)
+		t.Errorf("payment => %v", payment)
 		return
 	}
 
-	if payment.ID == newPayment.ID {
-		t.Error("repeated payment id not different")
+	newPayment, err := s.Repeat(payment.ID)
+	if err != nil {
+		t.Errorf("newPayment => %v", newPayment)
 		return
-	}
-
-	if payment.AccountID != newPayment.AccountID ||
-		payment.Status != newPayment.Status ||
-		payment.Category != newPayment.Category ||
-		payment.Amount != newPayment.Amount {
-		t.Error("some field is not equal the original")
 	}
 }
