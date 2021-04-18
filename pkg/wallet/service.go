@@ -1,9 +1,13 @@
 package wallet
 
 import (
+	"strconv"
+	"os"
+	"log"
 	"errors"
 	"github.com/anonimous-arn/wallet/pkg/types"
 	"github.com/google/uuid"
+	
 )
 
 var ErrPhoneRegistered = errors.New("phone already registered")
@@ -178,4 +182,34 @@ func (s *Service) PayFromFavorite(favoriteID string) (*types.Payment, error) {
 	}
 
 	return payment, nil
+}
+func (s *Service) ExportToFile(path string) error {
+	file, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		err := file.Close()
+		if err != nil {
+			log.Print(err)
+		}
+	} ()
+
+	content := make([]byte, 0)
+	for _, account := range s.accounts {
+		content = append(content, []byte(strconv.FormatInt(account.ID, 10))...)
+		content = append(content, []byte(";")...)
+		content = append(content, []byte(account.Phone)...)
+		content = append(content, []byte(";")...)
+		content = append(content, []byte(strconv.FormatInt(int64(account.Balance), 10))...)
+		content = append(content, []byte("|")...)
+	}
+
+	_, err = file.Write(content)
+	if err != nil {
+		log.Print(err)
+		return err
+	}
+
+	return nil
 }
