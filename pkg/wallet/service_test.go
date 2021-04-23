@@ -1,6 +1,8 @@
 package wallet
 
 import (
+	"io/ioutil"
+	"os"
 	"fmt"
 	"github.com/anonimous-arn/wallet/pkg/types"
 	"github.com/google/uuid"
@@ -259,5 +261,337 @@ func TestService_PayFromFavorite_fail(t *testing.T) {
 	_, err := s.PayFromFavorite(uuid.New().String())
 	if err == nil {
 		t.Error("PayFromFavorite(): must be error, now returned nil")
+	}
+}
+func TestService_ExportToFile_EmptyData(t *testing.T) {
+	svc := &Service{}
+
+	err := svc.ExportToFile("1.txt")
+	if err != nil {
+		t.Error(err)
+	}
+	file, err := os.Open("1.txt")
+	if err != nil {
+		t.Error(err)
+	}
+
+	stats, err := file.Stat()
+	if err != nil {
+		t.Error(err)
+	}
+
+	if stats.Size() != 0 {
+		t.Error("file must be zero")
+	}
+}
+
+func TestService_ExportToFile(t *testing.T) {
+	svc := &Service{}
+
+	_, err := svc.RegisterAccount("+992000000000")
+	if err != nil {
+		t.Error(err)
+	}
+
+	err = svc.ExportToFile("1.txt")
+	if err != nil {
+		t.Error(err)
+	}
+	file, err := os.Open("1.txt")
+	if err != nil {
+		t.Error(err)
+	}
+
+	stats, err := file.Stat()
+	if err != nil {
+		t.Error(err)
+	}
+
+	if stats.Size() == 0 {
+		t.Error("file must be zero")
+	}
+}
+
+func TestService_ImportToFile(t *testing.T) {
+	svc := &Service{}
+
+	err := svc.ImportFromFile("1.txt")
+	if err != nil {
+		t.Error(err)
+	}
+
+	k := 0
+	for _, account := range svc.accounts {
+		if account.Phone == "+992000000000" {
+			k++
+		}
+	}
+
+	if k <= 0 {
+		t.Error("incorrect func")
+	}
+}
+
+func TestSetice_Export(t *testing.T) {
+	svc := &Service{}
+
+	account, err := svc.RegisterAccount("+992000000000")
+	if err != nil {
+		t.Error(err)
+	}
+
+	account.Balance = 100
+
+	payment, err := svc.Pay(account.ID, 100, "auto")
+	if err != nil {
+		t.Error(err)
+	}
+
+	_, err = svc.FavoritePayment(payment.ID, "isbraniy")
+	if err != nil {
+		t.Error(err)
+	}
+
+	err = svc.Export(".")
+	if err != nil {
+		t.Error(err)
+	}
+
+	_, err = ioutil.ReadFile("accounts.dump")
+	if err != nil {
+		t.Error(err)
+	}
+
+	_, err = ioutil.ReadFile("payments.dump")
+	if err != nil {
+		t.Error(err)
+	}
+
+	_, err = ioutil.ReadFile("favorites.dump")
+	if err != nil {
+		t.Error(err)
+	}
+}
+
+func TestService_Import(t *testing.T) {
+	svc := &Service{}
+
+	err := svc.Import(".")
+	if err != nil {
+		t.Error(err)
+	}
+
+	if svc.accounts[0].Phone != "+992000000000" {
+		t.Error("incorrect func")
+	}
+}
+func TestService_Import_IfHaveData(t *testing.T) {
+	svc := &Service{}
+
+	account, err := svc.RegisterAccount("+992000000000")
+	if err != nil {
+		t.Error(err)
+	}
+
+	account.Balance = 100
+
+	payment, err := svc.Pay(account.ID, 100, "auto")
+	if err != nil {
+		t.Error(err)
+	}
+
+	_, err = svc.FavoritePayment(payment.ID, "isbraniy")
+	if err != nil {
+		t.Error(err)
+	}
+
+	err = svc.Import(".")
+	if err != nil {
+		t.Error(err)
+	}
+
+	if account.Phone == "+992" {
+		t.Error("incorrect func")
+	}
+}
+
+func TestService_HistoryToFile(t *testing.T) {
+	svc := &Service{}
+
+	payments := []types.Payment{
+		{
+			ID:        "1",
+			AccountID: 1,
+			Amount:    10,
+			Category:  "auto",
+			Status:    "active",
+		},
+		{
+			ID:        "2",
+			AccountID: 1,
+			Amount:    10,
+			Category:  "auto",
+			Status:    "active",
+		},
+		{
+			ID:        "3",
+			AccountID: 1,
+			Amount:    10,
+			Category:  "auto",
+			Status:    "active",
+		},
+		{
+			ID:        "4",
+			AccountID: 1,
+			Amount:    10,
+			Category:  "auto",
+			Status:    "active",
+		},
+		{
+			ID:        "5",
+			AccountID: 1,
+			Amount:    10,
+			Category:  "auto",
+			Status:    "active",
+		},
+		{
+			ID:        "6",
+			AccountID: 1,
+			Amount:    10,
+			Category:  "auto",
+			Status:    "active",
+		},
+		{
+			ID:        "7",
+			AccountID: 1,
+			Amount:    10,
+			Category:  "auto",
+			Status:    "active",
+		},
+		{
+			ID:        "8",
+			AccountID: 1,
+			Amount:    10,
+			Category:  "auto",
+			Status:    "active",
+		},
+		{
+			ID:        "9",
+			AccountID: 1,
+			Amount:    10,
+			Category:  "auto",
+			Status:    "active",
+		},
+		{
+			ID:        "10",
+			AccountID: 1,
+			Amount:    10,
+			Category:  "auto",
+			Status:    "active",
+		},
+	}
+
+	err := svc.HistoryToFiles(payments, ".", 3)
+	if err != nil {
+		t.Error(err)
+	}
+
+	err = svc.HistoryToFiles(payments, ".", 4)
+	if err != nil {
+		t.Error(err)
+	}
+
+	err = svc.HistoryToFiles(payments, ".", 5)
+	if err != nil {
+		t.Error(err)
+	}
+
+	err = svc.HistoryToFiles(payments, ".", 10)
+	if err != nil {
+		t.Error(err)
+	}
+
+	err = svc.HistoryToFiles(payments, ".", 11)
+	if err != nil {
+		t.Error(err)
+	}
+
+	err = svc.HistoryToFiles(payments, ".", 1)
+	if err != nil {
+		t.Error(err)
+	}
+
+}
+
+func fileFunc(l int, t *testing.T) {
+	files, err := ioutil.ReadDir("./test")
+	if err != nil {
+		t.Error(err)
+	}
+
+	if len(files) != l {
+		t.Error("incorrect")
+	}
+
+	for _, file := range files {
+		err = os.Remove("test/" + file.Name())
+		if err != nil {
+			t.Error(err)
+		}
+	}
+}
+
+func TestService_SumPayments(t *testing.T) {
+	svc := &Service{}
+
+	for i := 0; i < 103; i++ {
+		svc.payments = append(svc.payments, &types.Payment{Amount: 1})
+	}
+
+	sum := svc.SumPayments(10)
+	if sum != 103 {
+		t.Error("incoorect")
+	}
+}
+
+func Benchmark_SumPayments(b *testing.B) {
+	svc := &Service{}
+
+	for i := 0; i < 103; i++ {
+		svc.payments = append(svc.payments, &types.Payment{Amount: 1})
+	}
+
+	result := 103
+
+	for i := 0; i < b.N; i++ {
+		sum := svc.SumPayments(result)
+		if result != int(sum) {
+			b.Fatalf("invalid result, got %v, want %v", sum, result)
+		}
+	}
+}
+
+func Benchmark_FilterPayments(b *testing.B) {
+	svc := &Service{}
+
+	account, err := svc.RegisterAccount("+992000000000")
+	if err != nil {
+		b.Error(err)
+	}
+	for i := 0; i < 103; i++ {
+		svc.payments = append(svc.payments, &types.Payment{AccountID: account.ID, Amount: 1})
+	}
+
+	result := 103
+
+	for i := 0; i < b.N; i++ {
+		payments, err := svc.FilterPayments(account.ID, result)
+		if err != nil {
+			b.Error(err)
+		}
+
+		if result != len(payments) {
+			b.Fatalf("invalid result, got %v, want %v", len(payments), result)
+		}
 	}
 }
