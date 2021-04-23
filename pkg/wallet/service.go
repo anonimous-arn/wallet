@@ -696,3 +696,105 @@ func (s *Service) FilterPayments(accountID int64, goroutines int) ([]types.Payme
 
 	return filteredPayments, nil
 }
+func (s *Service) FilterPaymentsByFn(filter func(payment types.Payment) bool, goroutines int,) ([]types.Payment, error){
+
+	wg := sync.WaitGroup{}
+	mu := sync.Mutex{}
+	kol := 0
+	i := 0
+	var ps []types.Payment
+	if goroutines == 0 {
+		kol = len(s.payments)
+	} else {
+		kol = int(len(s.payments) / goroutines)
+	}
+	for i = 0; i < goroutines-1; i++ {
+		wg.Add(1)
+		go func(index int) {
+			defer wg.Done()
+			var pays []types.Payment
+			payments := s.payments[index*kol : (index+1)*kol]
+			for _, v := range payments {
+				p := types.Payment{
+					ID:        v.ID,
+					AccountID: v.AccountID,
+					Amount:    v.Amount,
+					Category:  v.Category,
+					Status:    v.Status,
+				}
+
+				if filter(p) {
+					pays = append(pays, p)
+				}
+			}
+			mu.Lock()
+			ps = append(ps, pays...)
+			mu.Unlock()
+
+		}(i)
+	}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		var pays []types.Payment
+		payments := s.payments[i*kol:]
+		for _, v := range payments {
+
+			p := types.Payment{
+				ID:        v.ID,
+				AccountID: v.AccountID,
+				Amount:    v.Amount,
+				Category:  v.Category,
+				Status:    v.Status,
+			}
+
+			if filter(p) {
+				pays = append(pays, p)
+			}
+		}
+		mu.Lock()
+		ps = append(ps, pays...)
+		mu.Unlock()
+
+	}()
+	wg.Wait()
+	if len(ps) == 0{
+		return nil, nil
+	}
+	return  ps, nil
+}
+//SumPaymentsWithProgress делит платежи на куски по 100_000 платежей в каждом и суммирует их параллельно друг другу
+func (s *Service) SumPaymentsWithProgress() <-chan types.Progress {
+	sizeOfUnit := 100_0000 		/* когда условие и требование в задаче не совпадают :) */
+
+	wg := sync.WaitGroup{}
+	goroutines := len(s.payments) / sizeOfUnit /* определяем количество горутин - сколько кусков потребуется сложить*/
+	if goroutines <= 1 {
+		goroutines = 1	
+	/* на случай если платеж всего один (или их нет) */
+	}
+	ch := make(chan types.Progress)
+
+	for i := 0; i < goroutines; i++ {
+		wg.Add(1)
+		go func(ch chan <- types.Progress, payments []*types.Payment) {
+			//defer close(ch)
+			var sum types.Money = 0
+			defer wg.Done()
+			for _, pay := range payments {
+				sum += pay.Amount
+			}
+			ch <- types.Progress{
+				Part:   len(payments), 
+				Result: sum,
+			}
+		}(ch, s.payments)
+	}
+
+	go func() {
+		defer close(ch)
+		wg.Wait()
+	}()
+
+	return ch
+} 
